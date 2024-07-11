@@ -70,7 +70,7 @@ class BonitoModel(BaseModelImpl):
                 in_channels = 16, 
                 out_channels = 384, 
                 kernel_size = 19, 
-                stride= 5, 
+                stride= 1, 
                 padding=19//2, 
                 bias=True),
             nn.SiLU()
@@ -99,7 +99,7 @@ class BonitoModel(BaseModelImpl):
             'cnn_output_activation': 'silu',
             'encoder_input_size': 384,
             'encoder_output_size': 384,
-            'cnn_stride': 5,
+            'cnn_stride': 1,
         }
         return defaults
         
@@ -111,5 +111,5 @@ class BonitoModel(BaseModelImpl):
         self.convolution = self.build_cnn()
         self.cnn_stride = self.get_defaults()['cnn_stride']
         self.encoder = self.build_encoder(input_size = 384, reverse = True)
-        self.decoder = self.build_decoder(encoder_output_size = 384, decoder_type = 'crf')
-        self.decoder_type = 'crf'
+        self.decoder = self.build_decoder(encoder_output_size = 384, decoder_type = 'ctc')
+        self.decoder_type = 'ctc'
