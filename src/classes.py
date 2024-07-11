@@ -1214,6 +1214,8 @@ class BaseFast5Dataset(Dataset):
         if isinstance(signal, np.ndarray):
             signal = torch.from_numpy(signal)
 
+        stub = 0
+
         T = signal.shape[0]
         if chunksize == 0:
             chunks = signal[None, :]
@@ -1221,9 +1223,11 @@ class BaseFast5Dataset(Dataset):
             chunks = torch.nn.functional.pad(signal, (chunksize - T, 0))[None, :]
         else:
             stub = (T - overlap) % (chunksize - overlap)
-            chunks = signal[stub:].unfold(0, chunksize, chunksize - overlap)
+            chunks = signal[...,stub:].unfold(0, chunksize, chunksize - overlap).movedim(-2,0)
+            if stub > 0:
+                chunks = torch.cat([signal[None, :chunksize], chunks], dim=0)
         
-        return chunks.unsqueeze(1)
+        return chunks.unsqueeze(1), stub
     
     def normalize(self, read_data):
         return normalize_signal_from_read_data(read_data)
@@ -1252,11 +1256,11 @@ class BaseFast5Dataset(Dataset):
                     trim, _ = self.trim(norm_signal[:8000])
                     norm_signal = norm_signal[trim:]
 
-                chunks = self.chunk(norm_signal, self.window_size, self.window_overlap)
+                chunks, stub = self.chunk(norm_signal, self.window_size, self.window_overlap)
                 num_chunks = chunks.shape[0]
                 
                 uuid_fields = uuid.UUID(read_id).fields
-                id_arr = np.zeros((num_chunks, 6), dtype = np.int)
+                id_arr = np.zeros((num_chunks, 6), dtype = np.int64)
                 for i, uf in enumerate(uuid_fields):
                     id_arr[:, i] = uf
                 
@@ -1267,7 +1271,8 @@ class BaseFast5Dataset(Dataset):
         out = {
             'x': torch.vstack(chunks_list).squeeze(1), 
             'id': np.vstack(id_list),
-            'len': np.concatenate(l_list)
+            'len': np.concatenate(l_list),
+            'trim_first': trim + stub, # chunk len that are trimmed
         }
         return out
 
@@ -1337,22 +1342,27 @@ class BaseBasecaller():
         if isinstance(chunks, np.ndarray):
             chunks = torch.from_numpy(chunks)
 
-        if chunks.shape[0] == 1: return chunks.squeeze(0)
+        if chunks.shape[0] == 1: return chunks.squeeze(0), 0
 
-        semi_overlap = overlap // 2
-        start, end = semi_overlap // stride, (chunksize - semi_overlap) // stride
-        stub = (length - overlap) % (chunksize - overlap)
+        semi_overlap = overlap // 2 # 100
+        start, end = semi_overlap // stride, (chunksize - semi_overlap) // stride #20,380
+        # print(f"start: {start}, end: {end}")
+        stub = (length - overlap) % (chunksize - overlap) # 原始信号多出来的部份
+        # print(f"stub size at stitch: {stub}")
         first_chunk_end = (stub + semi_overlap) // stride if (stub > 0) else end
+        # print(f"first_chunk_end: {first_chunk_end}")
+        # print(chunks[1:-1, start:end].shape)
 
         if reverse:
             chunks = list(chunks)
             return torch.cat([
                 chunks[-1][:-start], *(x[-end:-start] for x in reversed(chunks[1:-1])), chunks[0][-first_chunk_end:]
-            ])
+            ]), first_chunk_end
         else:
             return torch.cat([
                 chunks[0, :first_chunk_end], *chunks[1:-1, start:end], chunks[-1, start:]
-            ])
+            ]), first_chunk_end
+
 
     def stich_by_alignment(self, preds, qscores_list, num_patch_bases = 10):
 
@@ -1528,7 +1538,7 @@ class BasecallerCTC(BaseBasecaller):
             stride = self.stride, 
             reverse = False,
         )
-        probs_stack = probs_stack.unsqueeze(1)
+        probs_stack = probs_stack[0].unsqueeze(1)
 
         if self.beam_size == 1:
             greedy = True
@@ -1548,6 +1558,16 @@ class BasecallerCTC(BaseBasecaller):
             overlap = self.overlap, 
             stride = self.stride
         )
+
+        # # code block for export ctc trace
+        # probs_stack_softmax = probs_stack.squeeze(1)
+        # probs_stack_softmax = torch.nn.functional.softmax(probs_stack_softmax, dim = -1)
+        # probs_stack_softmax = probs_stack_softmax.cpu().numpy()
+        # print(f"Shape of probs_stack_softmax in basecaller: {probs_stack_softmax.shape}")
+
+        # # save prob stack, path, read_len to npy, use read_id as file name under signal_ctc_trace
+        # np.savez_compressed(f"signal_ctc_trace/{read_id}.npz", read_len = read_len, probs_stack = probs_stack_softmax, trace_path = seq[0][1])
+
 
         if isinstance(seq[0], tuple):
 
