@@ -21,6 +21,8 @@ from evaluation import alignment_accuracy, make_align_arr, elongate_cigar
 
 from layers.bonito import CTC_CRF, BonitoLinearCRFDecoder
 
+import os
+
 class BaseModel(nn.Module):
     """Abstract class for basecaller models
 
@@ -1559,14 +1561,17 @@ class BasecallerCTC(BaseBasecaller):
             stride = self.stride
         )
 
-        # # code block for export ctc trace
-        # probs_stack_softmax = probs_stack.squeeze(1)
-        # probs_stack_softmax = torch.nn.functional.softmax(probs_stack_softmax, dim = -1)
-        # probs_stack_softmax = probs_stack_softmax.cpu().numpy()
-        # print(f"Shape of probs_stack_softmax in basecaller: {probs_stack_softmax.shape}")
+        # code block for export ctc trace
+        # if CTC_TRACE_SAVE_FOLDER exists, save the probs_stack to npz
+        if os.environ.get('CTC_TRACE_SAVE_FOLDER') is not None:
+            probs_stack_softmax = probs_stack.squeeze(1)
+            probs_stack_softmax = torch.nn.functional.softmax(probs_stack_softmax, dim = -1)
+            probs_stack_softmax = probs_stack_softmax.cpu().numpy()
+            print(f"Shape of probs_stack_softmax in basecaller: {probs_stack_softmax.shape}")
 
-        # # save prob stack, path, read_len to npy, use read_id as file name under signal_ctc_trace
-        # np.savez_compressed(f"signal_ctc_trace/{read_id}.npz", read_len = read_len, probs_stack = probs_stack_softmax, trace_path = seq[0][1])
+            # save prob stack, path, read_len to npy, use read_id as file name under signal_ctc_trace
+            # np.savez_compressed(f"/tmp/signal_ctc_trace/{read_id}.npz", read_len = read_len, probs_stack = probs_stack_softmax, trace_path = seq[0][1])
+            np.savez_compressed(f"{os.environ.get('CTC_TRACE_SAVE_FOLDER')}/{read_id}.npz", read_len = read_len, probs_stack = probs_stack_softmax, trace_path = seq[0][1])
 
 
         if isinstance(seq[0], tuple):
