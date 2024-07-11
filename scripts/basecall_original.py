@@ -13,6 +13,7 @@ import numpy as np
 import torch
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print(device)
 
 if __name__ == "__main__":
 
@@ -44,7 +45,7 @@ if __name__ == "__main__":
         if f.endswith('.fast5'):
             file_list.append(os.path.join(args.fast5_dir, f))
 
-    fast5_dataset = BaseFast5Dataset(fast5_list= file_list, buffer_size = 1)
+    fast5_dataset = BaseFast5Dataset(fast5_list= file_list, buffer_size = 1, window_size=args.chunk_size, window_overlap=args.window_overlap)
 
     output_file = args.output_file
 

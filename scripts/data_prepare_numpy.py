@@ -15,6 +15,7 @@ from pathlib import Path
 import multiprocessing as mp
 from tqdm import tqdm
 import random
+import vbz_h5py_plugin
 
 import argparse
 
